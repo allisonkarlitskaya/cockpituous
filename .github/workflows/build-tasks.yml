@@ -1,21 +1,45 @@
 name: build-tasks
+
 on:
   # this is meant to be run on an approved PR branch for convenience
   workflow_dispatch:
+
+# We derive a unique ID here to make sure that we don't get into a situation
+# where different runners pick different tags (eg: for builds near midnight, or
+# in different time zones).  The manifest job picks the final name.
+env:
+  tag: quay.io/cockpit/tasks
+  tmptag: quay.io/cockpit/tasks-tmp:${{ github.run_id }}.${{ github.run_attempt }}
+
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        build:
+          - label: amd64
+            runner: buildjet-2vcpu-ubuntu-2204
+          - label: arm64
+            runner: buildjet-2vcpu-ubuntu-2204-arm
+
+    runs-on: ${{ matrix.build.runner }}
     environment: quay.io
-    timeout-minutes: 30
+    timeout-minutes: 10
+
     steps:
-      - name: Clone repository
-        uses: actions/checkout@v4
+      - run: podman login -u ${{ secrets.QUAY_BOTUSER }} -p ${{ secrets.QUAY_TOKEN }} quay.io
+      - uses: actions/checkout@v4
+      - run: podman build -t tasks tasks/container
+      - run: podman push tasks '${{ env.tmptag }}-${{ matrix.build.label }}'
 
-      - name: Log into container registry
-        run: podman login -u ${{ secrets.QUAY_BOTUSER }} -p ${{ secrets.QUAY_TOKEN }} quay.io
+  manifest:
+    needs: build
 
-      - name: Build tasks container
-        run: make tasks-container
+    runs-on: buildjet-2vcpu-ubuntu-2204
+    environment: quay.io
+    timeout-minutes: 5
 
-      - name: Push container to registry
-        run: make tasks-push
+    steps:
+      - run: podman login -u ${{ secrets.QUAY_BOTUSER }} -p ${{ secrets.QUAY_TOKEN }} quay.io
+      - run: podman manifest create tasks '${{ env.tmptag }}'-{amd,arm}64
+      - run: podman manifest push tasks "${{ env.tag }}:$(date --iso-8601)"
+      - run: podman manifest push tasks "${{ env.tag }}:latest"
