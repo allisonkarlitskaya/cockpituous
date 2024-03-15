@@ -8,8 +8,8 @@ on:
 # where different runners pick different tags (eg: for builds near midnight, or
 # in different time zones).  The manifest job picks the final name.
 env:
-  tag: quay.io/cockpit/tasks
-  tmptag: quay.io/cockpit/tasks-tmp:${{ github.run_id }}.${{ github.run_attempt }}
+  tag: ghcr.io/allisonkarlitskaya/tasks
+  tmptag: ghcr.io/allisonkarlitskaya/tasks-tmp:${{ github.run_id }}.${{ github.run_attempt }}
 
 jobs:
   build:
@@ -22,11 +22,10 @@ jobs:
             runner: buildjet-2vcpu-ubuntu-2204-arm
 
     runs-on: ${{ matrix.build.runner }}
-    environment: quay.io
     timeout-minutes: 10
 
     steps:
-      - run: podman login -u ${{ secrets.QUAY_BOTUSER }} -p ${{ secrets.QUAY_TOKEN }} quay.io
+      - run: podman login -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }} ghcr.io
       - uses: actions/checkout@v4
       - run: podman build -t tasks tasks/container
       - run: podman push tasks '${{ env.tmptag }}-${{ matrix.build.label }}'
@@ -35,11 +34,10 @@ jobs:
     needs: build
 
     runs-on: buildjet-2vcpu-ubuntu-2204
-    environment: quay.io
     timeout-minutes: 5
 
     steps:
-      - run: podman login -u ${{ secrets.QUAY_BOTUSER }} -p ${{ secrets.QUAY_TOKEN }} quay.io
+      - run: podman login -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }} ghcr.io
       - run: podman manifest create tasks '${{ env.tmptag }}'-{amd,arm}64
       - run: podman manifest push tasks "${{ env.tag }}:$(date --iso-8601)"
       - run: podman manifest push tasks "${{ env.tag }}:latest"
