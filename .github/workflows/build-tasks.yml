@@ -25,10 +25,24 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - run: podman login -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }} ghcr.io
-      - uses: actions/checkout@v4
-      - run: podman build -t tasks tasks/container
-      - run: podman push tasks '${{ env.tmptag }}-${{ matrix.build.label }}'
+      -
+        name: Log in to container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      -
+        name: Checkout
+        uses: actions/checkout@v4
+      -
+        name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          push: true
+          tags: ${{ env.tmptag }}-${{ matrix.build.label }}
+          context: tasks/container
+          file: tasks/container/Containerfile
 
   manifest:
     needs: build
